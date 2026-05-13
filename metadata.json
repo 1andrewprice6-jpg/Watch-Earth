@@ -1,0 +1,8 @@
+{
+  "name": "Sovereign-13 Engine",
+  "description": "Autonomous animation logic mapping a 364-frame visible circuit and 13-month calibration pulse.",
+  "requestFramePermissions": [
+    "camera"
+  ],
+  "majorCapabilities": []
+}
