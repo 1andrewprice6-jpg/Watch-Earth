@@ -359,6 +359,57 @@ const skyFragmentShader = `
   }
 `;
 
+function AtmospherePolish() {
+  const { camera } = useThree();
+  const materialRef = useRef<THREE.ShaderMaterial>(null);
+
+  useFrame(() => {
+    if (materialRef.current) {
+      materialRef.current.uniforms.viewVector.value.copy(camera.position);
+    }
+  });
+
+  return (
+    <mesh position={[0, 0, 0]}>
+      {/* 5.05 to act as a firmament dome over the 5.0 radius earth disk */}
+      <sphereGeometry args={[5.05, 64, 64]} />
+      <shaderMaterial
+        ref={materialRef}
+        transparent={true}
+        side={THREE.BackSide}
+        blending={THREE.AdditiveBlending}
+        depthWrite={false}
+        uniforms={useMemo(() => ({
+            glowColor: { value: new THREE.Color(0x3366ff) },
+            viewVector: { value: new THREE.Vector3() }
+        }), [])}
+        vertexShader={`
+            varying vec3 vNormal;
+            varying vec3 vViewPosition;
+            void main() {
+                vNormal = normalize(normalMatrix * normal);
+                vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
+                vViewPosition = -mvPosition.xyz;
+                gl_Position = projectionMatrix * mvPosition;
+            }
+        `}
+        fragmentShader={`
+            varying vec3 vNormal;
+            varying vec3 vViewPosition;
+            uniform vec3 glowColor;
+            void main() {
+                // Fresnel intensity
+                float intensity = pow(0.7 - dot(vNormal, normalize(vViewPosition)), 4.0);
+                // Mask the bottom half so it only acts as a dome above y=0
+                float mask = smoothstep(-0.5, 0.5, vViewPosition.y);
+                gl_FragColor = vec4(glowColor, intensity * mask);
+            }
+        `}
+      />
+    </mesh>
+  );
+}
+
 function DynamicSky({ sunPosRef, sunColorRef }) {
   const materialRef = useRef<THREE.ShaderMaterial>(null);
 
@@ -408,13 +459,12 @@ function TopographicMesh({ sunPos, sunColor, viewMode }) {
     <mesh rotation={[-Math.PI / 2, 0, 0]} receiveShadow castShadow>
       {/* High segments for vertex displacement */}
       <planeGeometry args={[10, 10, 512, 512]} />
-      <meshStandardMaterial 
+      <meshStandardMaterial
         ref={materialRef}
-        roughness={0.8}
-        metalness={0.2}
+        roughness={0.9}
+        metalness={0.1}
         bumpMap={elevMap}
-        bumpScale={0.06}
-        onBeforeCompile={(shader) => {
+        bumpScale={0.06}        onBeforeCompile={(shader) => {
           shader.uniforms.uColorTex = { value: colorMap };
           shader.uniforms.uElevTex = { value: elevMap };
           shader.uniforms.uSunPos = { value: new THREE.Vector3() };
@@ -1074,20 +1124,22 @@ function SunMoon({ time, metricsRef, sunPosRef, sunColorRef, viewMode }) {
   return (
     <>
       {/* Sun Light */}
-      <pointLight 
-         ref={lightRef} 
-         distance={40} 
-         intensity={15} 
-         decay={2.0} 
-         castShadow 
+      <directionalLight
+         ref={lightRef}
+         intensity={2.5}
+         castShadow
          shadow-bias={-0.0005}
          shadow-normalBias={0.02}
          shadow-mapSize={[8192, 8192]}
          shadow-camera-near={0.5}
          shadow-camera-far={30}
+         shadow-camera-left={-10}
+         shadow-camera-right={10}
+         shadow-camera-top={10}
+         shadow-camera-bottom={-10}
          shadow-radius={2}
       />
-      
+
       {/* Bloom Mesh (Volumetric Halo) */}
       <Billboard ref={bloomRef}>
          <mesh>
@@ -1573,8 +1625,9 @@ export default function Sovereign3D({ simState, setMetrics, viewMode, showJourne
       {viewMode !== 'ar' && <color attach="background" args={['#010103']} />}
       {viewMode !== 'ar' && <fog attach="fog" args={['#010206', 4, 25]} />}
       <ambientLight intensity={viewMode === 'ar' ? 0.3 : 0.2} color="#8ab4f8" />
-      <hemisphereLight intensity={viewMode === 'ar' ? 0.4 : 0.3} color="#ffffff" groundColor="#001133" />
+      <hemisphereLight intensity={viewMode === 'ar' ? 0.4 : 0.4} color="#4488ff" groundColor="#111111" />
       
+      {viewMode !== 'ar' && <AtmospherePolish />}
       {viewMode !== 'ar' && <DynamicSky sunPosRef={sunPosRef} sunColorRef={sunColorRef} />}
       {viewMode !== 'ar' && <DynamicStarfield sunPosRef={sunPosRef} />}
       
